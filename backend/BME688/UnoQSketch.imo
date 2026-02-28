@@ -1,0 +1,43 @@
+#include <Wire.h>
+#include <Arduino_RouterBridge.h>
+#include <Adafruit_BME680.h>
+
+Adafruit_BME680 bme;
+
+void setup() {
+  Bridge.begin();
+  Monitor.begin();
+  delay(500);
+
+  Monitor.println("Booting BME688...");
+
+  if (!bme.begin(0x76)) {
+    Monitor.println("Sensor not found!");
+    while (1);
+  }
+
+  Monitor.println("Sensor found!");
+}
+
+void loop() {
+  if (!bme.performReading()) {
+    Monitor.println("Reading failed");
+    return;
+  }
+
+  Monitor.print("Temp: ");
+  Monitor.println(bme.temperature);
+
+  Monitor.print("Humidity: ");
+  Monitor.println(bme.humidity);
+
+  Monitor.print("Pressure: ");
+  Monitor.println(bme.pressure / 100.0);
+
+  Monitor.print("Gas: ");
+  Monitor.println(bme.gas_resistance);
+
+  Monitor.println("----");
+
+  delay(2000);
+}
