@@ -31,7 +31,7 @@ export default function LiveGasChart({ title = "Live Gas (Ω)", samples }: Props
     })) ?? [];
 
   return (
-    <div className="rounded-lg border p-4">
+    <div className="card">
       <div className="mb-3 font-semibold">{title}</div>
         
       {!data.length ? (
@@ -39,13 +39,25 @@ export default function LiveGasChart({ title = "Live Gas (Ω)", samples }: Props
           No live samples yet. Start sensor streaming or use mock data.
         </div>
       ) : (
-        <div className="h-64 w-full">
+        <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <XAxis dataKey="time" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+            <LineChart data={data} margin={{ top: 10, right: 30, left: 50, bottom: 40 }}>
+              <XAxis
+                dataKey="time"
+                tick={{ fontSize: 12, fill: "#111827", fontWeight: 700 }}
+                interval="preserveStartEnd"
+                axisLine={{ stroke: "#111827", strokeWidth: 2 }}
+                tickLine={{ stroke: "#d1d5db", strokeWidth: 1 }}
+                label={{ value: "Time (mm:ss)", position: "bottom", offset: 20, style: { fill: "#111827", fontSize: 12, fontWeight: 700 } }}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: "#111827", fontWeight: 700 }}
+                axisLine={{ stroke: "#111827", strokeWidth: 2 }}
+                tickLine={{ stroke: "#d1d5db", strokeWidth: 1 }}
+                label={{ value: "Gas (Ω)", angle: -90, position: "left", offset: 40, style: { fill: "#111827", fontSize: 12, fontWeight: 700 } }}
+              />
               <Tooltip />
-              <Line type="monotone" dataKey="gas_ohms" dot={false} />
+              <Line type="monotone" dataKey="gas_ohms" stroke="#8884d8" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
