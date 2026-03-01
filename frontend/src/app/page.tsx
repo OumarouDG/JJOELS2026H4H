@@ -80,9 +80,9 @@ export default function HomePage() {
 
         {/* Right Column: Analysis Output (5/12 width) */}
         <div className="lg:col-span-5">
-          <div className="sticky top-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] min-h-[450px] flex flex-col justify-center">
+          <div className="relative rounded-2xl border border-slate-200 bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] min-h-[450px] flex flex-col justify-center">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">Analysis Engine</h2>
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">Analysis</h2>
               {result && <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />}
             </div>
             

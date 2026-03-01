@@ -45,9 +45,9 @@ export default function CaptureTimeline({
   const rows = items ?? fetched;
 
   return (
-    <div className="card rounded-xl shadow-sm overflow-hidden">
+    <div className="card rounded-xl shadow-sm overflow-hiddenNeed ">
       <div className="border-b bg-gray-50/50 flex items-center justify-between">
-        <h2 className="font-bold text-gray-800">{title}</h2>
+        <h2 className="p-2 font-bold text-gray-800">{title}</h2>
         <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-200 text-gray-600">
           {loading ? "Syncing..." : "Live"}
         </span>
@@ -81,7 +81,6 @@ export default function CaptureTimeline({
                         {confidencePercent}% Match
                       </span>
                     </div>
-
                     {/* Confidence Meter */}
                     <div className="w-full bg-gray-100 rounded-full h-1.5">
                       <div 
