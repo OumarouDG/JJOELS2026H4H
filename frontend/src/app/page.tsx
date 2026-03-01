@@ -24,6 +24,26 @@ export default function HomePage() {
           {result ? JSON.stringify(result, null, 2) : "No capture yet."}
         </pre>
       </div>
+
+      {/* =========================
+          Emily Components (UI Layer)
+          DO NOT IMPLEMENT HERE
+      ========================= */}
+
+      {/* TODO(Emily): LiveGasChart */}
+      <div className="rounded-lg border p-4 text-sm text-gray-500">
+        LiveGasChart placeholder
+      </div>
+
+      {/* TODO(Emily): FeatureTable */}
+      <div className="rounded-lg border p-4 text-sm text-gray-500">
+        FeatureTable placeholder
+      </div>
+
+      {/* TODO(Emily): CaptureTimeline */}
+      <div className="rounded-lg border p-4 text-sm text-gray-500">
+        CaptureTimeline placeholder
+      </div>
     </main>
   );
 }

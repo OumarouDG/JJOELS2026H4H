@@ -1,3 +1,34 @@
+/**
+ * ===============================
+ * API CONTRACT (Frontend ↔ Backend)
+ * ===============================
+ *
+ * Base URL:
+ *   process.env.NEXT_PUBLIC_API_URL
+ *
+ * Endpoints expected:
+ *
+ * GET /metrics
+ *   -> Metrics
+ *
+ * GET /captures
+ *   -> CaptureResult[]
+ *
+ * POST /capture
+ *   body: { seconds: number }
+ *   -> CaptureResult
+ *
+ * POST /infer (optional)
+ *   body: { features: Record<string, number> }
+ *   -> CaptureResult
+ *
+ * Behavior:
+ * - If backend is unavailable, mock data is returned.
+ * - UI should always render safely without backend running.
+ *
+ * Single source of truth:
+ *   types.ts defines all shared structures.
+ */
 import type { CaptureResult, Metrics } from "./types";
 
 export const API_BASE =
@@ -23,15 +54,15 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
     cache: "no-store",
   });
 
+  const body = await safeJson(res);
+
   if (!res.ok) {
-    const body = await safeJson(res);
     throw new Error(
       `API ${res.status} ${res.statusText} on ${path}: ${JSON.stringify(body)}`
     );
   }
 
-    const body = await safeJson(res);
-    return body as T;
+  return body as T;
 }
 
 // --- Mock fallbacks (if backend isn't up) ---
