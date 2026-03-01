@@ -37,7 +37,7 @@ export default function FeatureTable({ title = "Features", features, maxRows = 5
       ) : (
         <div className="max-h-80 overflow-auto rounded border">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-gray-100">
+            <thead className="sticky top-0 bg-gray-00">
               <tr className="border-b">
                 <th className="px-3 py-2 text-left font-medium text-gray-700">Feature</th>
                 <th className="px-3 py-2 text-right font-medium text-gray-700">Value</th>

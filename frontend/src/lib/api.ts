@@ -29,12 +29,11 @@
  * Single source of truth:
  *   types.ts defines all shared structures.
  */
-import type { CaptureResult, Metrics } from "./types";
+import type { CaptureResult, Metrics, SensorSample } from "./types";
 
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
-// --- Helpers ---
 async function safeJson(res: Response) {
   const text = await res.text().catch(() => "");
   try {
@@ -65,7 +64,6 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-// --- Mock fallbacks (if backend isn't up) ---
 function mockMetrics(): Metrics {
   return {
     accuracy: 0.0,
@@ -74,18 +72,6 @@ function mockMetrics(): Metrics {
   };
 }
 
-function mockCapture(): CaptureResult {
-  const now = new Date().toISOString();
-  return {
-    id: `mock-${Date.now()}`,
-    createdAt: now,
-    features: { mock: 1 },
-    prediction: "UNKNOWN",
-    confidence: 0,
-  };
-}
-
-// --- API functions ---
 export async function getMetrics(): Promise<Metrics> {
   try {
     return await http<Metrics>("/metrics");
@@ -104,29 +90,20 @@ export async function getCaptures(): Promise<CaptureResult[]> {
   }
 }
 
-export async function postCapture(seconds = 10): Promise<CaptureResult> {
-  try {
-    return await http<CaptureResult>("/capture", {
-      method: "POST",
-      body: JSON.stringify({ seconds }),
-    });
-  } catch (e) {
-    console.warn("postCapture fallback:", e);
-    return mockCapture();
-  }
+export async function getLive(tail = 120): Promise<SensorSample[]> {
+  const res = await http<{ samples: SensorSample[] }>(`/live?tail=${tail}`);
+  return res.samples ?? [];
 }
 
-// Optional: if backend wants direct inference call
-export async function postInfer(
-  features: Record<string, number>
-): Promise<CaptureResult> {
-  try {
-    return await http<CaptureResult>("/infer", {
-      method: "POST",
-      body: JSON.stringify({ features }),
-    });
-  } catch (e) {
-    console.warn("postInfer fallback:", e);
-    return mockCapture();
+export async function postRecord(durationMs = 5000): Promise<CaptureResult> {
+  const res = await http<{ ok: boolean; capture?: CaptureResult; error?: string }>(
+    `/record?duration_ms=${durationMs}`,
+    { method: "POST" }
+  );
+
+  if (!res.ok || !res.capture) {
+    throw new Error(res.error || "Record failed");
   }
+
+  return res.capture;
 }

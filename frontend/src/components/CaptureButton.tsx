@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { postCapture } from "@/lib/api";
+import { postRecord } from "@/lib/api";
 import type { CaptureResult } from "@/lib/types";
 
 type Props = {
@@ -16,10 +16,10 @@ export default function CaptureButton({ onResult }: Props) {
     setErr(null);
     setLoading(true);
     try {
-      const r = await postCapture(10);
-      onResult(r);
+      const capture = await postRecord(5000);
+      onResult(capture);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Capture failed";
+      const msg = e instanceof Error ? e.message : "Record failed";
       setErr(msg);
     } finally {
       setLoading(false);
@@ -33,7 +33,7 @@ export default function CaptureButton({ onResult }: Props) {
         disabled={loading}
         className="rounded-lg border px-4 py-2 font-medium bg-indigo-600 text-white hover:bg-gray-100 hover:text-black disabled:opacity-60'"
       >
-        {loading ? "Capturing..." : "Capture 10s"}
+        {loading ? "Capturing..." : "Capture 5s"}
       </button>
 
       {err && <div className="text-sm text-red-600">{err}</div>}
