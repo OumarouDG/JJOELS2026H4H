@@ -1,0 +1,54 @@
+{
+  "accuracy": 0.98,
+  "labels": [
+    "LOW_LOAD",
+    "HIGH_LOAD"
+  ],
+  "feature_names": [
+    "Ethanol_ppm",
+    "Acetaldehyde_ppm",
+    "Acetic_Acid_ppm",
+    "Isoprene_ppm",
+    "Hydrogen_Sulfide_ppm",
+    "Sensor_Resistance_Ohms"
+  ],
+  "confusion_matrix": [
+    [
+      5,
+      0
+    ],
+    [
+      1,
+      44
+    ]
+  ],
+  "classification_report": {
+    "LOW_LOAD": {
+      "precision": 0.8333333333333334,
+      "recall": 1.0,
+      "f1-score": 0.9090909090909091,
+      "support": 5.0
+    },
+    "HIGH_LOAD": {
+      "precision": 1.0,
+      "recall": 0.9777777777777777,
+      "f1-score": 0.9887640449438202,
+      "support": 45.0
+    },
+    "accuracy": 0.98,
+    "macro avg": {
+      "precision": 0.9166666666666667,
+      "recall": 0.9888888888888889,
+      "f1-score": 0.9489274770173646,
+      "support": 50.0
+    },
+    "weighted avg": {
+      "precision": 0.9833333333333333,
+      "recall": 0.98,
+      "f1-score": 0.9807967313585292,
+      "support": 50.0
+    }
+  },
+  "n_train": 150,
+  "n_test": 50
+}
