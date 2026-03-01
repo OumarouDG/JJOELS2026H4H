@@ -1,4 +1,3 @@
-/* stylelint-disable */
 @import "tailwindcss";
 
 :root {
@@ -29,6 +28,13 @@ body {
 /* card utility for consistent padding/bordering */
 @layer components {
   .card {
-    @apply rounded-lg border p-4 bg-white;
+    @apply rounded-lg border p-4;
+    /* semi‑transparent white background + backdrop blur for glass look */
+    @apply bg-white/30 backdrop-blur-sm;
+    /* keep the blur from leaking through the border */
+    background-clip: padding-box;
+
+    background-color: rgba(255,255,255,0.3);
+    backdrop-filter: blur(var(--tw-backdrop-blur-sm));
   }
 }

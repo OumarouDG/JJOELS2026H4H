@@ -53,7 +53,7 @@ export default function CaptureTimeline({
         </span>
       </div>
 
-      <div className="max-h-[400px] overflow-auto">
+      <div className="max-h-100 overflow-auto">
         {!rows.length ? (
           <div className="p-8 text-center text-sm text-gray-400">
             Waiting for incoming data...
