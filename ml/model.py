@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import sys
+import pandas as pd
+import joblib
 import joblib
 import numpy as np
 import pandas as pd
@@ -27,6 +30,16 @@ from sklearn.metrics import accuracy_score, confusion_matrix, classification_rep
 DEFAULT_FEATURE_COLS = ["Temperature", "Humidity", "Pressure", "GasResistance"]
 DEFAULT_LABEL_COL = "Label"
 
+model = joblib.load("artifacts/model.joblib")
+
+file = sys.argv[1]
+df = pd.read_csv(file)
+
+gas_mean = df["gas"].mean()
+
+prediction = model.predict([[gas_mean]])
+
+print(prediction[0])
 
 @dataclass
 class TrainConfig:

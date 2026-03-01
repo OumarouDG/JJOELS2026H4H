@@ -123,6 +123,10 @@ def extract_features(samples: List[Tuple[float, float, float, float]]) -> Dict[s
     features["pressure_max"] = pf["max"]  # pressure max
 
     features["gas_mean"] = gf["mean"]  # gas mean
+
+    # Model expects this canonical name (trained feature)
+    features["Sensor_Resistance_Ohms"] = gf["mean"]  # alias to gas_mean for backend/model
+
     features["gas_min"] = gf["min"]  # gas min
     features["gas_max"] = gf["max"]  # gas max
 

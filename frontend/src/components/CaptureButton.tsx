@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { postCapture } from "@/lib/api";
 import type { CaptureResult } from "@/lib/types";
 
 type Props = {
-  onResult: (r: CaptureResult) => void;
+  onResult?: (r: CaptureResult) => void;
 };
 
 export default function CaptureButton({ onResult }: Props) {
@@ -15,9 +14,22 @@ export default function CaptureButton({ onResult }: Props) {
   async function handleClick() {
     setErr(null);
     setLoading(true);
+
     try {
-      const r = await postCapture(10);
-      onResult(r);
+      // NEW: call FastAPI /record endpoint
+      const res = await fetch(
+        "http://localhost:8000/record?seconds=5",
+        { method: "POST" }
+      );
+
+      if (!res.ok) {
+        throw new Error("Recording failed");
+      }
+
+      const data = await res.json();
+
+      // optional callback
+      onResult?.(data);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Capture failed";
       setErr(msg);
@@ -31,9 +43,9 @@ export default function CaptureButton({ onResult }: Props) {
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-lg border px-4 py-2 font-medium hover:bg-gray-100 disabled:opacity-60 bg-gray-500'"
+        className="rounded-lg border px-4 py-2 font-medium hover:bg-gray-100 disabled:opacity-60"
       >
-        {loading ? "Capturing..." : "Capture 10s"}
+        {loading ? "Recording..." : "Record 5s"}
       </button>
 
       {err && <div className="text-sm text-red-600">{err}</div>}
