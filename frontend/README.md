@@ -1,56 +1,36 @@
-# FRONTEND — Demo User Interface
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-##  PURPOSE
-The frontend provides the live demo interface used by judges.
+## Getting Started
 
-It visualizes sensor activity and ML predictions.
+First, run the development server:
 
----
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-##  WHO WORKS HERE
-Branch example:
-feature/frontend-ui
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-Frontend developers ONLY work here.
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
----
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## RESPONSIBILITIES
-- Live sensor visualization
-- Capture window interaction
-- Display ML predictions
-- Show evaluation metrics
-- Timeline of captures
+## Learn More
 
----
+To learn more about Next.js, take a look at the following resources:
 
-## REQUIRED FEATURES
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-### Live View
-- Plot last 30–60 seconds gas resistance
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-### Capture
-- "Capture 10s" button
-- Sends request to backend
+## Deploy on Vercel
 
-### Feature Display
-- Table of computed features
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-### Model Results
-- Accuracy metrics
-- Confusion matrix display
-
-### Timeline
-- List of previous captures + predictions
-
----
-
-## TECH STACK
-Next.js (React + TypeScript)  
-Tailwind CSS  
-Recharts
-
----
-
-## SUCCESS CONDITION
-User clicks Capture → prediction appears visually.
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
