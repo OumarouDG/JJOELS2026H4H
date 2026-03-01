@@ -105,16 +105,11 @@ export async function getCaptures(): Promise<CaptureResult[]> {
   }
 }
 
-export async function postCapture(seconds = 10): Promise<CaptureResult> {
-  try {
-    return await http<CaptureResult>("/capture", {
-      method: "POST",
-      body: JSON.stringify({ seconds }),
-    });
-  } catch (e) {
-    console.warn("postCapture fallback:", e);
-    return mockCapture();
-  }
+export async function postRecord(durationMs = 5000): Promise<{ ok: boolean; started: boolean; duration_ms: number }> {
+  return await http<{ ok: boolean; started: boolean; duration_ms: number }>(
+    `/record?duration_ms=${durationMs}`,
+    { method: "POST" }
+  );
 }
 
 // Optional: if backend wants direct inference call

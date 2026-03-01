@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { postCapture } from "@/lib/api";
+import { postRecord } from "@/lib/api";
 import type { CaptureResult } from "@/lib/types";
 
 type Props = {
@@ -16,11 +16,11 @@ export default function CaptureButton({ onResult }: Props) {
     setErr(null);
     setLoading(true);
     try {
-      const r = await postCapture(5);
-      await fetch("http://127.0.0.1:8001/record", { method: "POST" });
-      onResult(r);
+      await postRecord(5000);
+      // Do NOT call onResult here.
+      // The real result arrives via WebSocket: msg.type === "capture_saved"
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Capture failed";
+      const msg = e instanceof Error ? e.message : "Record failed";
       setErr(msg);
     } finally {
       setLoading(false);

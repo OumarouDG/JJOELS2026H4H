@@ -373,3 +373,6 @@ async def ws_endpoint(ws: WebSocket):
         pass
     finally:
         await hub.disconnect(ws)
+
+for r in app.routes:
+    print(type(r).__name__, getattr(r, "path", None))
