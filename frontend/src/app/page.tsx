@@ -3,11 +3,11 @@
 import { useState } from "react";
 import StatusBanner from "@/components/StatusBanner";
 import CaptureButton from "@/components/CaptureButton";
+import type { CaptureResult } from "@/lib/types";
 
-type CaptureMockResult = { mock: boolean };
 
 export default function HomePage() {
-  const [result, setResult] = useState<CaptureMockResult | null>(null);
+  const [result, setResult] = useState<CaptureResult | null>(null);
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
