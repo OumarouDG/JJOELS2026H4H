@@ -24,7 +24,7 @@ export default function FeatureTable({ title = "Features", features, maxRows = 5
   const shown = entries.slice(0, maxRows);
 
   return (
-    <div className="rounded-lg border p-4">
+    <div className="card">
       <div className="mb-3 flex items-center justify-between">
         <div className="font-semibold">{title}</div>
         <div className="text-xs text-gray-500">

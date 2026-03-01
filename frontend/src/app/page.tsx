@@ -43,7 +43,7 @@ export default function HomePage() {
           <h1 className="text-3xl font-black tracking-tighter text-slate-900">
             JJOELS<span className="text-indigo-600">2026</span> <span className="font-light text-slate-400">H4H</span>
           </h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Advanced Biometric Analysis</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Real-Time Breath Biomarker Analysis</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
@@ -114,7 +114,7 @@ export default function HomePage() {
                     : 'bg-amber-50/60 border-amber-500 text-amber-900'
                 }`}>
                   <div className="relative z-10">
-                    <div className="text-[10px] uppercase font-black tracking-[0.2em] opacity-60 mb-2">Diagnostic Result</div>
+                    <div className="text-[10px] uppercase font-black tracking-[0.2em] opacity-60 mb-2">Predictive Result</div>
                     <div className="text-3xl font-black tracking-tight italic uppercase">
                       {result.prediction}
                     </div>
