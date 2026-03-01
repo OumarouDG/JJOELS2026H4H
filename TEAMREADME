@@ -1,0 +1,21 @@
+---
+
+# ⚠️ TEAM WORKFLOW (READ BEFORE CODING)
+
+## How We Work (Required)
+
+Pull repo → create your own branch → only work inside your assigned folder.
+
+DO NOT push directly to `main`.
+
+### Example branches
+- feature/frontend-ui
+- feature/collector-stream
+- feature/api-fastapi
+- feature/model-training
+
+Each teammate works ONLY inside their folder unless coordinated with the team.
+
+This prevents merge conflicts and broken builds during the hackathon.
+
+---
