@@ -24,10 +24,10 @@ export default function FeatureTable({ title = "Features", features, maxRows = 5
   const shown = entries.slice(0, maxRows);
 
   return (
-    <div className="rounded-lg border p-4">
+    <div className="card">
       <div className="mb-3 flex items-center justify-between">
         <div className="font-semibold">{title}</div>
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-gray-700">
           {entries.length ? `${Math.min(entries.length, maxRows)} / ${entries.length}` : "0"}
         </div>
       </div>
@@ -37,7 +37,7 @@ export default function FeatureTable({ title = "Features", features, maxRows = 5
       ) : (
         <div className="max-h-80 overflow-auto rounded border">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-gray-200">
+            <thead className="sticky top-0 bg-gray-00">
               <tr className="border-b">
                 <th className="px-3 py-2 text-left font-medium">Feature</th>
                 <th className="px-3 py-2 text-right font-medium">Value</th>
@@ -58,7 +58,7 @@ export default function FeatureTable({ title = "Features", features, maxRows = 5
       )}
 
       {entries.length > maxRows && (
-        <div className="mt-2 text-xs text-gray-500">
+        <div className="mt-2 text-xs text-gray-700">
           Showing first {maxRows}. (Yeah, we’re not printing 400 features to impress anyone.)
         </div>
       )}
