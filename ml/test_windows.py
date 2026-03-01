@@ -2,135 +2,91 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import json
 
+import joblib
 import numpy as np
 import pandas as pd
-import joblib
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 
-def make_windows(df: pd.DataFrame, n_per_window: int) -> list[pd.DataFrame]:
-    windows = []
-    for start in range(0, len(df), n_per_window):
-        chunk = df.iloc[start : start + n_per_window]
-        if len(chunk) == n_per_window:
-            windows.append(chunk)
-    return windows
+def make_windows(df: pd.DataFrame, window_seconds: float, sample_rate_hz: float) -> list[pd.DataFrame]:
+    n = int(round(window_seconds * sample_rate_hz))
+    if n < 2:
+        raise ValueError("window_seconds * sample_rate_hz must be >= 2.")
+    out = []
+    for start in range(0, len(df) - n + 1, n):
+        out.append(df.iloc[start : start + n])
+    return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--data", required=True)
-    ap.add_argument("--out", default="artifacts")
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--test-size", type=float, default=0.25)
-    ap.add_argument("--cfu-threshold", type=float, default=1e7)
-    ap.add_argument("--window-seconds", type=float, default=5.0)
-    ap.add_argument("--sample-rate-hz", type=float, default=5.0)
+def window_feature_mean_resistance(w: pd.DataFrame) -> pd.DataFrame:
+    v = pd.to_numeric(w["Sensor_Resistance_Ohms"], errors="coerce").dropna().to_numpy(dtype=float)
+    mean_val = float(np.mean(v)) if len(v) else 0.0
+    return pd.DataFrame([{"Sensor_Resistance_Ohms": mean_val}])
+
+
+def ensure_label(df: pd.DataFrame, *, cfu_threshold: float) -> pd.DataFrame:
+    if "Label" in df.columns:
+        return df
+    if "Bacteria_Load_CFU_per_mL" in df.columns:
+        cfu = pd.to_numeric(df["Bacteria_Load_CFU_per_mL"], errors="coerce").astype(float)
+        out = df.copy()
+        out["Label"] = np.where(cfu >= cfu_threshold, "HIGH_LOAD", "LOW_LOAD")
+        return out
+    raise ValueError("CSV must contain either Label or Bacteria_Load_CFU_per_mL.")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Evaluate a trained model on fixed 5s windows from a CSV.")
+    ap.add_argument("--model", required=True, help="Path to model.joblib")
+    ap.add_argument("--data", required=True, help="Path to CSV dataset")
+    ap.add_argument("--window-seconds", "--window_seconds", type=float, default=5.0)
+    ap.add_argument("--sample-rate-hz", "--sample_rate_hz", type=float, default=5.0)
+    ap.add_argument("--cfu-threshold", "--cfu_threshold", type=float, default=1e7)
+    ap.add_argument("--print-n", type=int, default=0, help="Print first N window predictions")
     args = ap.parse_args()
 
-    data_path = Path(args.data)
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    model = joblib.load(Path(args.model))
 
-    df = pd.read_csv(data_path)
-
+    df = pd.read_csv(Path(args.data))
     if "Sensor_Resistance_Ohms" not in df.columns:
-        raise ValueError("Missing Sensor_Resistance_Ohms column.")
-    if "Bacteria_Load_CFU_per_mL" not in df.columns:
-        raise ValueError("Missing Bacteria_Load_CFU_per_mL column.")
+        raise ValueError("CSV missing Sensor_Resistance_Ohms column.")
 
-    # derive per-row labels
-    cfu = pd.to_numeric(df["Bacteria_Load_CFU_per_mL"], errors="coerce")
-    df = df.copy()
-    df["Label"] = np.where(cfu >= args.cfu_threshold, "HIGH_LOAD", "LOW_LOAD")
+    df = ensure_label(df, cfu_threshold=float(args.cfu_threshold))
 
-    # windowing
-    n_per_window = int(round(args.window_seconds * args.sample_rate_hz))
-    if n_per_window < 2:
-        raise ValueError("window too small; increase window-seconds or sample-rate-hz.")
-
-    windows = make_windows(df, n_per_window)
+    windows = make_windows(df, float(args.window_seconds), float(args.sample_rate_hz))
     if not windows:
-        raise ValueError("Not enough rows to form a full window.")
+        raise ValueError("Not enough rows to form one full window.")
 
-    X_rows = []
-    y_rows = []
+    y_true = []
+    y_pred = []
 
-    for w in windows:
-        vals = pd.to_numeric(w["Sensor_Resistance_Ohms"], errors="coerce").dropna().to_numpy(dtype=float)
-        if len(vals) == 0:
-            continue
+    for i, w in enumerate(windows):
+        y = w["Label"].astype(str).mode().iloc[0]
+        Xw = window_feature_mean_resistance(w)
+        pred = model.predict(Xw)[0]
 
-        # feature: mean over window (matches your test script)
-        X_rows.append({"Sensor_Resistance_Ohms": float(np.mean(vals))})
+        y_true.append(y)
+        y_pred.append(pred)
 
-        # label: majority label in window
-        y_rows.append(w["Label"].mode().iloc[0])
+        if args.print_n and i < args.print_n:
+            print(f"Window {i:03d}: true={y} pred={pred} mean_res={float(Xw.iloc[0,0]):.2f}")
 
-    X = pd.DataFrame(X_rows)
-    y = pd.Series(y_rows)
+    labels = sorted(pd.Series(y_true).unique().tolist())
+    acc = float(accuracy_score(y_true, y_pred))
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
 
-    # clean
-    X = X.replace([np.inf, -np.inf], np.nan).dropna()
-    y = y.loc[X.index]
+    print(f"\nWindows evaluated: {len(y_true)}")
+    print(f"Window seconds: {args.window_seconds}, sample_rate_hz: {args.sample_rate_hz}")
+    print(f"Accuracy: {acc:.4f}\n")
+    print("Confusion matrix (rows=true, cols=pred):")
+    print("labels:", labels)
+    print(cm)
+    print("\nClassification report:")
+    print(classification_report(y_true, y_pred, labels=labels, zero_division=0))
 
-    # stratify only if safe
-    counts = y.value_counts()
-    strat = None
-    if (counts >= 2).all() and len(counts) > 1:
-        strat = y
-    else:
-        print("⚠️ Not enough samples per class for stratify; splitting without stratify.")
-        print(counts.to_string())
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=args.test_size,
-        random_state=args.seed,
-        stratify=strat,
-    )
-
-    model = RandomForestClassifier(
-        n_estimators=300,
-        random_state=args.seed,
-        n_jobs=-1,
-    )
-    model.fit(X_train, y_train)
-
-    pred = model.predict(X_test)
-    acc = float(accuracy_score(y_test, pred))
-    labels = ["LOW_LOAD", "HIGH_LOAD"]
-    cm = confusion_matrix(y_test, pred, labels=labels).tolist()
-    report = classification_report(y_test, pred, labels=labels, output_dict=True, zero_division=0)
-
-    metrics = {
-        "accuracy": acc,
-        "labels": labels,
-        "feature_names": ["Sensor_Resistance_Ohms"],
-        "confusion_matrix": cm,
-        "classification_report": report,
-        "n_train": int(len(y_train)),
-        "n_test": int(len(y_test)),
-        "window_seconds": args.window_seconds,
-        "sample_rate_hz": args.sample_rate_hz,
-        "samples_per_window": n_per_window,
-        "cfu_threshold": args.cfu_threshold,
-    }
-
-    model_path = out_dir / "model.joblib"
-    metrics_path = out_dir / "metrics.json"
-    joblib.dump(model, model_path)
-    metrics_path.write_text(json.dumps(metrics, indent=2))
-
-    print(f"Saved model:   {model_path}")
-    print(f"Saved metrics: {metrics_path}")
-    print(f"Accuracy:      {acc:.4f}")
-    print(f"Windows used:  {len(y)}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

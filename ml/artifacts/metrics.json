@@ -1,5 +1,5 @@
 {
-  "accuracy": 1.0,
+  "accuracy": 0.95,
   "labels": [
     "LOW_LOAD",
     "HIGH_LOAD"
@@ -7,47 +7,48 @@
   "feature_names": [
     "Sensor_Resistance_Ohms"
   ],
+  "window_seconds": 5.0,
+  "sample_rate_hz": 5.0,
+  "samples_per_window": 25,
   "confusion_matrix": [
     [
-      0,
-      0
+      1,
+      1
     ],
     [
       0,
-      2
+      18
     ]
   ],
   "classification_report": {
     "LOW_LOAD": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 0.0
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1-score": 0.6666666666666666,
+      "support": 2.0
     },
     "HIGH_LOAD": {
-      "precision": 1.0,
+      "precision": 0.9473684210526315,
       "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 2.0
+      "f1-score": 0.972972972972973,
+      "support": 18.0
     },
-    "accuracy": 1.0,
+    "accuracy": 0.95,
     "macro avg": {
-      "precision": 0.5,
-      "recall": 0.5,
-      "f1-score": 0.5,
-      "support": 2.0
+      "precision": 0.9736842105263157,
+      "recall": 0.75,
+      "f1-score": 0.8198198198198199,
+      "support": 20.0
     },
     "weighted avg": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1-score": 1.0,
-      "support": 2.0
+      "precision": 0.9526315789473683,
+      "recall": 0.95,
+      "f1-score": 0.9423423423423424,
+      "support": 20.0
     }
   },
-  "n_train": 6,
-  "n_test": 2,
-  "window_seconds": 5.0,
-  "sample_rate_hz": 5.0,
-  "samples_per_window": 25,
+  "n_windows_total": 80,
+  "n_train": 60,
+  "n_test": 20,
   "cfu_threshold": 10000000.0
 }
