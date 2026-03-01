@@ -12,7 +12,7 @@
 
 ## Data Ingestion
 - **Python Serial Collector (local):**
-  - Reads Serial stream (CSV/JSON lines)
+  - Reads Serial stream (CSV)
   - Maintains a rolling buffer
   - On “Capture 10s” request, extracts the last N seconds
   - Computes features + posts to backend
