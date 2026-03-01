@@ -1,0 +1,107 @@
+```cpp
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME680.h>
+#include <Arduino_RouterBridge.h>
+
+Adafruit_BME680 bme;
+
+// I2C address (switch is usually 0x77 by default; flip to 0x76 if needed)
+#define BME_ADDR 0x77
+
+unsigned long last_ms = 0;
+const unsigned long PERIOD_MS = 200; // 5 Hz
+
+bool streaming = false;
+bool header_sent = false;
+
+void printHelp() {
+  Monitor.println("Commands:");
+  Monitor.println("  s = start streaming");
+  Monitor.println("  p = pause/stop streaming");
+  Monitor.println("  r = read once");
+  Monitor.println("  h = help");
+}
+
+void printHeader() {
+  // Keep it clean: plotter labels are fragile.
+  Monitor.println("tempC,humidity,pressure_hPa,gas_ohms");
+}
+
+void printReading() {
+  if (!bme.performReading()) return;
+
+  float tempC = bme.temperature;
+  float hum = bme.humidity;
+  float pres_hPa = bme.pressure / 100.0f;
+  uint32_t gas = bme.gas_resistance;
+
+  Monitor.print(tempC, 2);    Monitor.print(",");
+  Monitor.print(hum, 2);      Monitor.print(",");
+  Monitor.print(pres_hPa, 2); Monitor.print(",");
+  Monitor.println(gas);
+}
+
+void handleCommands() {
+  while (Monitor.available()) {
+    char c = (char)Monitor.read();
+    if (c == '\n' || c == '\r' || c == ' ') continue;
+
+    if (c == 's') {
+      streaming = true;
+      header_sent = false; // re-send header on next stream start
+      Monitor.println("OK: streaming ON");
+    } else if (c == 'p') {
+      streaming = false;
+      Monitor.println("OK: streaming OFF");
+    } else if (c == 'r') {
+      if (!header_sent) { printHeader(); header_sent = true; }
+      printReading();
+    } else if (c == 'h') {
+      printHelp();
+    } else {
+      Monitor.println("Unknown command. Type 'h'.");
+    }
+  }
+}
+
+void setup() {
+  Bridge.begin();
+  Monitor.begin();
+  delay(500);
+
+  Wire.begin();
+
+  if (!bme.begin(BME_ADDR)) {
+    Monitor.print("BME688 not found at 0x");
+    Monitor.println(BME_ADDR, HEX);
+    while (1) delay(1000);
+  }
+
+  bme.setTemperatureOversampling(BME680_OS_8X);
+  bme.setHumidityOversampling(BME680_OS_2X);
+  bme.setPressureOversampling(BME680_OS_4X);
+  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+  bme.setGasHeater(320, 150);
+
+  Monitor.println("BME688 ready. Type 'h' for commands.");
+}
+
+void loop() {
+  handleCommands();
+
+  if (!streaming) return;
+
+  if (!header_sent) {
+    // For best label behavior: open Serial Plotter, then send 's'
+    printHeader();
+    header_sent = true;
+    last_ms = millis();
+  }
+
+  if (millis() - last_ms < PERIOD_MS) return;
+  last_ms += PERIOD_MS;
+
+  printReading();
+}
+```
