@@ -19,8 +19,8 @@ export default function CaptureButton({ onResult }: Props) {
       const r = await postCapture(10);
       onResult(r);
     } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Capture failed";
-    setErr(msg);
+      const msg = e instanceof Error ? e.message : "Capture failed";
+      setErr(msg);
     } finally {
       setLoading(false);
     }
@@ -35,6 +35,7 @@ export default function CaptureButton({ onResult }: Props) {
       >
         {loading ? "Capturing..." : "Capture 10s"}
       </button>
+
       {err && <div className="text-sm text-red-600">{err}</div>}
     </div>
   );

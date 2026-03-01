@@ -30,7 +30,8 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
-  return (await res.json()) as T;
+    const body = await safeJson(res);
+    return body as T;
 }
 
 // --- Mock fallbacks (if backend isn't up) ---

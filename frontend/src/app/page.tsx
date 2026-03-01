@@ -5,7 +5,6 @@ import StatusBanner from "@/components/StatusBanner";
 import CaptureButton from "@/components/CaptureButton";
 import type { CaptureResult } from "@/lib/types";
 
-
 export default function HomePage() {
   const [result, setResult] = useState<CaptureResult | null>(null);
 
@@ -21,7 +20,7 @@ export default function HomePage() {
 
       <div className="rounded-lg border p-4">
         <div className="font-semibold">Last Result</div>
-        <pre className="mt-2 text-xs">
+        <pre className="mt-2 overflow-auto rounded bg-gray-50 p-3 text-xs">
           {result ? JSON.stringify(result, null, 2) : "No capture yet."}
         </pre>
       </div>
