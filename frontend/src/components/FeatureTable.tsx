@@ -33,7 +33,7 @@ export default function FeatureTable({ title = "Features", features, maxRows = 5
       </div>
 
       {!entries.length ? (
-        <div className="text-sm text-gray-500">No features yet. Capture first.</div>
+        <div className="text-sm text-gray-700">No features yet. Capture first.</div>
       ) : (
         <div className="max-h-80 overflow-auto rounded border">
           <table className="w-full text-sm">
