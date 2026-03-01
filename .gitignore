@@ -1,0 +1,7 @@
+# Python virtual environment
+venv/
+gen.ipynb
+# In case you named it something slightly different
+.venv/
+env/
+ENV/
