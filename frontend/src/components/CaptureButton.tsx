@@ -6,15 +6,18 @@ import type { CaptureResult } from "@/lib/types";
 
 type Props = {
   onResult: (r: CaptureResult) => void;
+  onCaptureState?: (capturing: boolean) => void;
 };
 
-export default function CaptureButton({ onResult }: Props) {
+export default function CaptureButton({ onResult, onCaptureState }: Props) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function handleClick() {
     setErr(null);
     setLoading(true);
+    onCaptureState?.(true);
+
     try {
       const capture = await postRecord(5000);
       onResult(capture);
@@ -22,6 +25,7 @@ export default function CaptureButton({ onResult }: Props) {
       const msg = e instanceof Error ? e.message : "Record failed";
       setErr(msg);
     } finally {
+      onCaptureState?.(false);
       setLoading(false);
     }
   }
@@ -31,7 +35,7 @@ export default function CaptureButton({ onResult }: Props) {
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-lg border px-4 py-2 font-medium bg-indigo-600 text-white hover:bg-gray-100 hover:text-black disabled:opacity-60'"
+        className="rounded-lg border px-4 py-2 font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
       >
         {loading ? "Capturing..." : "Capture 5s"}
       </button>

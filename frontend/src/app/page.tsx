@@ -14,12 +14,15 @@ export default function HomePage() {
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [samples, setSamples] = useState<SensorSample[]>([]);
   const [liveOk, setLiveOk] = useState<boolean>(true);
+  const [capturing, setCapturing] = useState<boolean>(false);
 
   // Avoid overlapping fetches if one stalls
   const fetchingRef = useRef(false);
 
-  // Live Chart: HTTP polling from backend (/live)
+  // Live Chart: HTTP polling from backend (/live) ONLY while capturing
   useEffect(() => {
+    if (!capturing) return;
+
     let alive = true;
 
     async function tick() {
@@ -34,16 +37,23 @@ export default function HomePage() {
         });
 
         if (!res.ok) throw new Error(`live ${res.status}`);
-        const data = (await res.json()) as { samples?: SensorSample[] };
+        const data = (await res.json()) as {
+          samples?: SensorSample[];
+          capturing?: boolean;
+        };
 
         if (!alive) return;
 
         const incoming = Array.isArray(data?.samples) ? data.samples : [];
         setSamples(incoming.slice(-120));
         setLiveOk(true);
+
+        // If backend reports capture ended, stop polling
+        if (data?.capturing === false) {
+          setCapturing(false);
+        }
       } catch {
         if (!alive) return;
-        // backend down / serial down / you sneezed near Windows
         setLiveOk(false);
       } finally {
         fetchingRef.current = false;
@@ -53,14 +63,14 @@ export default function HomePage() {
     // initial fetch immediately
     tick();
 
-    // poll a few times per second; smooth enough without melting your laptop
-    const id = window.setInterval(tick, 400);
+    // poll faster during capture for smoother chart
+    const id = window.setInterval(tick, 200);
 
     return () => {
       alive = false;
       window.clearInterval(id);
     };
-  }, []);
+  }, [capturing]);
 
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-8 p-8 bg-slate-50 min-h-screen">
@@ -71,7 +81,9 @@ export default function HomePage() {
             JJOELS<span className="text-indigo-600">2026</span>{" "}
             <span className="font-light text-slate-400">H4H</span>
           </h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Real-Time Breath Biomarker Analysis</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+            Real-Time Breath Biomarker Analysis
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -84,14 +96,24 @@ export default function HomePage() {
               className={`text-xs font-bold flex items-center gap-1 justify-end ${
                 liveOk ? "text-emerald-500" : "text-rose-500"
               }`}
-              title={liveOk ? "Polling /live OK" : "Backend not responding to /live"}
+              title={
+                capturing
+                  ? liveOk
+                    ? "Capturing: polling /live OK"
+                    : "Capturing: backend not responding"
+                  : "Idle"
+              }
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  liveOk ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
+                  capturing
+                    ? liveOk
+                      ? "bg-emerald-500 animate-pulse"
+                      : "bg-rose-500"
+                    : "bg-slate-300"
                 }`}
               />
-              {liveOk ? "Node Active" : "Node Offline"}
+              {capturing ? (liveOk ? "Capturing" : "Capture Error") : "Idle"}
             </div>
           </div>
 
@@ -113,11 +135,27 @@ export default function HomePage() {
               <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">
                 Control Interface
               </h2>
-              <span className="text-[10px] text-slate-300 font-mono">ID: 882-X9</span>
+              <span className="text-[10px] text-slate-300 font-mono">
+                ID: 882-X9
+              </span>
             </div>
 
-            {/* CaptureButton should call POST /record and directly return capture */}
-            <CaptureButton onResult={setResult} />
+            {/* Start polling only when capture starts, stop when capture finishes */}
+            <CaptureButton
+              onResult={(cap) => {
+                setResult(cap);
+              }}
+              onCaptureState={(isOn) => {
+                setCapturing(isOn);
+                if (isOn) {
+                  // fresh chart for each session
+                  setSamples([]);
+                  // optional: clear previous result so "Awaiting..." shows during capture
+                  setResult(null);
+                  setLiveOk(true);
+                }
+              }}
+            />
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)]">
@@ -129,8 +167,12 @@ export default function HomePage() {
         <div className="lg:col-span-5">
           <div className="relative rounded-2xl border border-slate-200 bg-white p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] min-h-[450px] flex flex-col justify-center">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">Analysis</h2>
-              {result && <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />}
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">
+                Analysis
+              </h2>
+              {result && (
+                <div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+              )}
             </div>
 
             {!result ? (
@@ -169,7 +211,9 @@ export default function HomePage() {
                   }`}
                 >
                   <div className="relative z-10">
-                    <div className="text-[10px] uppercase font-black tracking-[0.2em] opacity-60 mb-2">Predictive Result</div>
+                    <div className="text-[10px] uppercase font-black tracking-[0.2em] opacity-60 mb-2">
+                      Predictive Result
+                    </div>
                     <div className="text-3xl font-black tracking-tight italic uppercase">
                       {result.prediction}
                     </div>
