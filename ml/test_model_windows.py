@@ -1,144 +1,93 @@
-# ml/test_model_windows.py
-# Runs an already-trained model (joblib) on a CSV and reports accuracy.
-# Also computes 5-second-window accuracy using majority vote.
+from __future__ import annotations
 
-import argparse                              # Parses command-line arguments
-import os                                    # File/path checks
-import sys                                   # Exits cleanly on error
-from collections import Counter              # Majority vote
-from typing import List, Optional            # Type hints
+import argparse
+from pathlib import Path
 
-import joblib                                # Loads the saved model
-import pandas as pd                          # CSV loading + data handling
+import numpy as np
+import pandas as pd
+import joblib
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
 
-def majority_vote(values: List[str]) -> Optional[str]:
-    """Return the most common value in a list (or None if empty)."""
-    if not values:                           # If list is empty
-        return None                          # No vote possible
-    counts = Counter(values)                 # Count each label
-    return counts.most_common(1)[0][0]        # Return the top label
+def make_windows(df: pd.DataFrame, window_seconds: int, sample_rate_hz: int) -> list[pd.DataFrame]:
+    """Split a dataframe into fixed-size consecutive windows."""
+    n_per_window = int(window_seconds * sample_rate_hz)
+    if n_per_window <= 0:
+        raise ValueError("window_seconds * sample_rate_hz must be > 0")
+
+    windows = []
+    for start in range(0, len(df), n_per_window):
+        chunk = df.iloc[start : start + n_per_window]
+        if len(chunk) == n_per_window:
+            windows.append(chunk)
+    return windows
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Test a joblib ML model on sensor CSV data.")
-    parser.add_argument("--data", required=True, help="Path to CSV file with sensor rows + labels.")
-    parser.add_argument("--model", default="ml/artifacts/model.joblib",
-                        help="Path to saved model.joblib (default: ml/artifacts/model.joblib).")
-    parser.add_argument("--window_s", type=float, default=5.0, help="Window size in seconds (default: 5).")
+def window_features(chunk: pd.DataFrame) -> pd.DataFrame:
+    """
+    Turn a window into the exact feature set the model expects.
+    Right now: only Sensor_Resistance_Ohms, aggregated to mean.
+    """
+    vals = chunk["Sensor_Resistance_Ohms"].astype(float).to_numpy()
+    feat = {
+        "Sensor_Resistance_Ohms": float(np.mean(vals)),
+    }
+    return pd.DataFrame([feat])
 
-    # Column names (you can override if your CSV uses different names)
-    parser.add_argument("--label_col", default="Label", help="Label column name (default: Label).")
-    parser.add_argument("--ts_col", default=None,
-                        help="Timestamp column name (optional). If provided, used for 5s windowing.")
-    parser.add_argument("--feature_cols", default="Temperature,Humidity,Pressure,GasResistance",
-                        help="Comma-separated feature columns (default: Temperature,Humidity,Pressure,GasResistance).")
 
-    # If you do NOT have timestamps, you can fake time using a sampling rate
-    parser.add_argument("--hz", type=float, default=None,
-                        help="Sampling rate (rows per second). Used only if --ts_col is not provided.")
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", required=True, help="Path to model.joblib")
+    ap.add_argument("--data", required=True, help="Path to CSV")
+    ap.add_argument("--window_seconds", type=int, default=5)
+    ap.add_argument("--sample_rate_hz", type=int, default=5)
+    ap.add_argument("--cfu_threshold", type=float, default=1e7)
+    args = ap.parse_args()
 
-    args = parser.parse_args()               # Parse all args
+    model = joblib.load(args.model)
 
-    data_path = args.data                    # CSV path from CLI
-    model_path = args.model                  # Model path from CLI
+    df = pd.read_csv(args.data)
 
-    if not os.path.exists(data_path):        # Ensure CSV exists
-        print(f"ERROR: CSV not found: {data_path}")  # Print clear error
-        sys.exit(1)                          # Exit with failure code
+    # --- Validate columns ---
+    if "Sensor_Resistance_Ohms" not in df.columns:
+        raise ValueError("CSV missing Sensor_Resistance_Ohms column.")
+    if "Bacteria_Load_CFU_per_mL" not in df.columns:
+        raise ValueError("CSV missing Bacteria_Load_CFU_per_mL column.")
 
-    if not os.path.exists(model_path):       # Ensure model exists
-        print(f"ERROR: model not found: {model_path}")  # Print clear error
-        sys.exit(1)                          # Exit with failure code
+    # --- Derive labels (LOW vs HIGH load) ---
+    cfu = df["Bacteria_Load_CFU_per_mL"].astype(float)
+    df = df.copy()
+    df["Label"] = np.where(cfu >= args.cfu_threshold, "HIGH_LOAD", "LOW_LOAD")
 
-    # Turn "a,b,c" into ["a","b","c"]
-    feature_cols = [c.strip() for c in args.feature_cols.split(",") if c.strip()]
+    # --- Windowing ---
+    windows = make_windows(df, args.window_seconds, args.sample_rate_hz)
+    if not windows:
+        raise ValueError("Not enough rows to form even one full window.")
 
-    # Load CSV
-    df = pd.read_csv(data_path)              # Read CSV into a DataFrame
+    y_true = []
+    y_pred = []
 
-    # Basic column checks
-    missing = [c for c in feature_cols if c not in df.columns]  # Find missing feature columns
-    if missing:                               # If any are missing
-        print(f"ERROR: Missing feature columns in CSV: {missing}")  # Show which ones
-        print(f"CSV columns are: {list(df.columns)}")               # Show what exists
-        sys.exit(1)                           # Exit
+    for w in windows:
+        # Label the window by majority label inside the window
+        label = w["Label"].mode().iloc[0]
+        Xw = window_features(w)
 
-    if args.label_col not in df.columns:     # Ensure label column exists
-        print(f"ERROR: Missing label column '{args.label_col}' in CSV.")  # Print error
-        print(f"CSV columns are: {list(df.columns)}")                      # Show columns
-        sys.exit(1)                           # Exit
+        pred = model.predict(Xw)[0]
 
-    # Load model
-    model = joblib.load(model_path)          # Load joblib model
+        y_true.append(label)
+        y_pred.append(pred)
 
-    # Build X and y
-    X = df[feature_cols].copy()              # Feature matrix
-    y_true = df[args.label_col].astype(str)  # Ground truth labels as strings
+    acc = accuracy_score(y_true, y_pred)
+    labels = ["LOW_LOAD", "HIGH_LOAD"]
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
 
-    # Predict per row
-    y_pred = model.predict(X)                # Model predictions
-    y_pred = pd.Series(y_pred).astype(str)   # Convert to string series
-
-    # Row-level accuracy
-    row_acc = (y_pred == y_true).mean()      # Fraction correct
-    print(f"Row accuracy: {row_acc * 100:.2f}% ({int((y_pred == y_true).sum())}/{len(df)})")
-
-    # Build a time column for windowing
-    if args.ts_col is not None:              # If timestamp column is provided
-        if args.ts_col not in df.columns:    # Ensure it exists
-            print(f"ERROR: Timestamp column '{args.ts_col}' not found in CSV.")  # Error
-            sys.exit(1)                      # Exit
-
-        # Convert to pandas datetime
-        ts = pd.to_datetime(df[args.ts_col], errors="coerce")  # Parse timestamps
-        if ts.isna().any():                  # If parsing failed anywhere
-            print("ERROR: Some timestamps could not be parsed. Fix the ts format or choose another column.")
-            sys.exit(1)
-
-        # Convert to seconds since start
-        t0 = ts.min()                        # Start time
-        t_sec = (ts - t0).dt.total_seconds() # Seconds from start
-
-    else:
-        # No timestamps: require a sampling rate to fake time
-        if args.hz is None or args.hz <= 0:  # Validate sampling rate
-            print("ERROR: Provide either --ts_col <timestamp_column> OR --hz <rows_per_second> for 5s windows.")
-            sys.exit(1)
-
-        # Fake time: 0, 1/hz, 2/hz, ...
-        t_sec = pd.Series(range(len(df)), dtype=float) / float(args.hz)
-
-    # Assign a window id: floor(time / window_s)
-    window_id = (t_sec / float(args.window_s)).astype(int)      # Window bucket per row
-
-    # Compute window-level majority labels
-    window_true = []                         # True label per window
-    window_pred = []                         # Pred label per window
-
-    for wid, group_idx in df.groupby(window_id).groups.items(): # Iterate window groups
-        idx = list(group_idx)               # Row indices in this window
-
-        # Majority label in that window (true)
-        true_vote = majority_vote(list(y_true.iloc[idx]))       # Majority of y_true
-        pred_vote = majority_vote(list(y_pred.iloc[idx]))       # Majority of y_pred
-
-        if true_vote is None or pred_vote is None:              # Safety check
-            continue                                            # Skip weird empty window
-
-        window_true.append(true_vote)                           # Store window true label
-        window_pred.append(pred_vote)                           # Store window predicted label
-
-    if len(window_true) == 0:               # If no windows built
-        print("Window accuracy: N/A (no windows computed)")
-        return
-
-    # Window accuracy
-    w_true = pd.Series(window_true)          # True window labels
-    w_pred = pd.Series(window_pred)          # Pred window labels
-    win_acc = (w_true == w_pred).mean()      # Fraction correct at window level
-    print(f"Window accuracy ({args.window_s:.1f}s): {win_acc * 100:.2f}% ({int((w_true == w_pred).sum())}/{len(w_true)})")
+    print(f"Windows evaluated: {len(y_true)}")
+    print(f"Accuracy: {acc:.4f}")
+    print("\nConfusion matrix (rows=true, cols=pred) [LOW_LOAD, HIGH_LOAD]:")
+    print(cm)
+    print("\nClassification report:")
+    print(classification_report(y_true, y_pred, labels=labels))
 
 
 if __name__ == "__main__":
-    main()                                   # Run main
+    main()

@@ -19,9 +19,12 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--test-size", type=float, default=0.25)
 
-    # For CFU dataset mode:
-    parser.add_argument("--cfu-threshold", type=float, default=1e7,
-                        help="If CFU column exists, classify LOW/HIGH around this threshold")
+    parser.add_argument(
+        "--cfu-threshold",
+        type=float,
+        default=1e7,
+        help="If CFU column exists, classify LOW/HIGH around this threshold",
+    )
 
     args = parser.parse_args()
 
@@ -33,34 +36,26 @@ def main():
 
     # ---- Detect dataset type ----
     if "Label" in df.columns:
-        # Generic labeled dataset
         label_col = "Label"
-        feature_cols = [c for c in df.columns if c != label_col]
+
+        if "Sensor_Resistance_Ohms" not in df.columns:
+            raise ValueError("Sensor_Resistance_Ohms column not found.")
 
         y = df[label_col].astype(str)
-        X = df[feature_cols]
+        X = df[["Sensor_Resistance_Ohms"]]
 
         labels = sorted(y.unique().tolist())
 
     elif "Bacteria_Load_CFU_per_mL" in df.columns:
-        # Your provided CFU dataset: make a binary label
+        if "Sensor_Resistance_Ohms" not in df.columns:
+            raise ValueError("Sensor_Resistance_Ohms column not found.")
+
         cfu = df["Bacteria_Load_CFU_per_mL"].astype(float)
         y = np.where(cfu >= args.cfu_threshold, "HIGH_LOAD", "LOW_LOAD")
         y = pd.Series(y)
 
-        feature_cols = [
-            "Ethanol_ppm",
-            "Acetaldehyde_ppm",
-            "Acetic_Acid_ppm",
-            "Isoprene_ppm",
-            "Hydrogen_Sulfide_ppm",
-            "Sensor_Resistance_Ohms",
-        ]
-        missing = [c for c in feature_cols if c not in df.columns]
-        if missing:
-            raise ValueError(f"CSV missing expected feature columns: {missing}")
-
-        X = df[feature_cols]
+        # 🔥 ONLY USE SENSOR RESISTANCE
+        X = df[["Sensor_Resistance_Ohms"]]
         labels = ["LOW_LOAD", "HIGH_LOAD"]
 
     else:
@@ -70,10 +65,18 @@ def main():
     X = X.replace([np.inf, -np.inf], np.nan).dropna()
     y = y.loc[X.index]
 
+    counts = y.value_counts()
+    if (counts < 2).any():
+        print("Not enough samples per class for stratify. Disabling stratify.")
+        strat = None
+    else:
+        strat = y
+
     # ---- Split ----
     strat = y if len(set(y)) > 1 else None
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
+        X,
+        y,
         test_size=args.test_size,
         random_state=args.seed,
         stratify=strat,
@@ -96,7 +99,7 @@ def main():
     metrics = {
         "accuracy": acc,
         "labels": labels,
-        "feature_names": list(X.columns),
+        "feature_names": ["Sensor_Resistance_Ohms"],
         "confusion_matrix": cm,
         "classification_report": report,
         "n_train": int(len(y_train)),
@@ -114,7 +117,7 @@ def main():
     print(f"Saved metrics: {metrics_path}")
     print(f"Accuracy:      {acc:.4f}")
     print(f"Labels:        {labels}")
-    print(f"Features:      {list(X.columns)}")
+    print(f"Features:      {['Sensor_Resistance_Ohms']}")
 
 
 if __name__ == "__main__":
