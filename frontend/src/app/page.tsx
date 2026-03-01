@@ -8,32 +8,39 @@ import LiveGasChart from "@/components/LiveGasChart";
 import FeatureTable from "@/components/FeatureTable";
 import CaptureTimeline from "@/components/CaptureTimeline";
 import type { CaptureResult, SensorSample } from "@/lib/types";
+import { API_BASE } from "@/lib/api";
 
 export default function HomePage() {
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [samples, setSamples] = useState<SensorSample[]>([]);
 
-  // Live Chart Mock Logic
+  // Live Chart: WebSocket stream from backend (/ws)
   useEffect(() => {
-    const id = window.setInterval(() => {
-      const now = Date.now();
-      const last = samples.length ? samples[samples.length - 1].gas_ohms : 75000;
-      const next = Math.max(1000, Math.round(last + (Math.random() - 0.5) * 3000));
+    const wsUrl = "ws://127.0.0.1:8001/ws";
+    const ws = new WebSocket(wsUrl);
 
-      setSamples((prev) => {
-        const nxt: SensorSample = {
-          t: now,
-          tempC: 22,
-          humidity: 45,
-          pressure_hPa: 1013,
-          gas_ohms: next,
-        };
-        const merged = [...prev, nxt];
-        return merged.slice(-120);
-      });
-    }, 500);
-    return () => window.clearInterval(id);
-  }, [samples]);
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg?.type === "data" && msg.sample) {
+          const s: SensorSample = msg.sample;
+          setSamples((prev) => [...prev, s].slice(-120));
+        }
+        if (msg?.type === "capture_saved" && msg.capture) {
+          setResult(msg.capture);
+        }
+      } catch {
+        // ignore junk
+      }
+    };
+
+    // If backend isn't up yet, this will error. That's fine.
+    ws.onerror = () => {
+      // noop
+    };
+
+    return () => ws.close();
+  }, []);
 
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-8 p-8 bg-slate-50 min-h-screen">
@@ -43,7 +50,7 @@ export default function HomePage() {
           <h1 className="text-3xl font-black tracking-tighter text-slate-900">
             JJOELS<span className="text-indigo-600">2026</span> <span className="font-light text-slate-400">H4H</span>
           </h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Advanced Biometric Analysis</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Real-Time Breath Biomarker Analysis</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
@@ -114,7 +121,7 @@ export default function HomePage() {
                     : 'bg-amber-50/60 border-amber-500 text-amber-900'
                 }`}>
                   <div className="relative z-10">
-                    <div className="text-[10px] uppercase font-black tracking-[0.2em] opacity-60 mb-2">Diagnostic Result</div>
+                    <div className="text-[10px] uppercase font-black tracking-[0.2em] opacity-60 mb-2">Predictive Result</div>
                     <div className="text-3xl font-black tracking-tight italic uppercase">
                       {result.prediction}
                     </div>

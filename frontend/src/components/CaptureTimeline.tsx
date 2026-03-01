@@ -45,15 +45,15 @@ export default function CaptureTimeline({
   const rows = items ?? fetched;
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-      <div className="border-b bg-gray-50/50 p-4 flex items-center justify-between">
+    <div className="card rounded-xl shadow-sm overflow-hidden">
+      <div className="border-b bg-gray-50/50 flex items-center justify-between">
         <h2 className="font-bold text-gray-800">{title}</h2>
         <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-200 text-gray-600">
           {loading ? "Syncing..." : "Live"}
         </span>
       </div>
 
-      <div className="max-h-[400px] overflow-auto">
+      <div className="max-h-100 overflow-auto">
         {!rows.length ? (
           <div className="p-8 text-center text-sm text-gray-400">
             Waiting for incoming data...

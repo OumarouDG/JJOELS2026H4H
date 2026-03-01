@@ -19,21 +19,21 @@ export default function MetricsPage() {
         <div className="text-sm text-gray-500">Loading...</div>
       ) : (
         <>
-          <div className="rounded-lg border p-4">
+          <div className="card">
             <div className="font-semibold">Accuracy</div>
             <div className="text-xl">
               {Math.round(m.accuracy * 100)}%
             </div>
           </div>
 
-          <div className="rounded-lg border p-4">
+          <div className="card">
             <div className="mb-2 font-semibold">Labels</div>
             <div className="text-sm text-gray-700">
               {m.labels.join(", ")}
             </div>
           </div>
 
-          <div className="rounded-lg border p-4">
+          <div className="card">
             <div className="mb-2 font-semibold">Feature Names</div>
             {m.feature_names.length ? (
               <ul className="list-inside list-disc text-sm">
@@ -51,7 +51,7 @@ export default function MetricsPage() {
           </div>
 
           {m.confusion_matrix_url && (
-            <div className="rounded-lg border p-4">
+            <div className="card">
               <div className="mb-2 font-semibold">Confusion Matrix</div>
               <img
                 src={

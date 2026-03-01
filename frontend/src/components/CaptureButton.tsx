@@ -16,7 +16,8 @@ export default function CaptureButton({ onResult }: Props) {
     setErr(null);
     setLoading(true);
     try {
-      const r = await postCapture(10);
+      const r = await postCapture(5);
+      await fetch("http://127.0.0.1:8001/record", { method: "POST" });
       onResult(r);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Capture failed";
@@ -33,7 +34,7 @@ export default function CaptureButton({ onResult }: Props) {
         disabled={loading}
         className="rounded-lg border px-4 py-2 font-medium hover:bg-gray-100 disabled:opacity-60 bg-gray-500'"
       >
-        {loading ? "Capturing..." : "Capture 10s"}
+        {loading ? "Capturing..." : "Capture 5s"}
       </button>
 
       {err && <div className="text-sm text-red-600">{err}</div>}
