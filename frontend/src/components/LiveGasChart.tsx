@@ -33,7 +33,7 @@ export default function LiveGasChart({ title = "Live Gas (Ω)", samples }: Props
   return (
     <div className="rounded-lg border p-4">
       <div className="mb-3 font-semibold">{title}</div>
-
+        
       {!data.length ? (
         <div className="text-sm text-gray-500">
           No live samples yet. Start sensor streaming or use mock data.

@@ -31,7 +31,7 @@ export default function CaptureButton({ onResult }: Props) {
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-lg border px-4 py-2 font-medium hover:bg-gray-100 disabled:opacity-60"
+        className="rounded-lg border px-4 py-2 font-medium hover:bg-gray-100 disabled:opacity-60 bg-gray-500'"
       >
         {loading ? "Capturing..." : "Capture 10s"}
       </button>

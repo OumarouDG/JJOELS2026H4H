@@ -1,8 +1,7 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { getCaptures } from "@/lib/api";
 import type { CaptureResult } from "@/lib/types";
+
 
 type Props = {
   title?: string;
@@ -10,13 +9,8 @@ type Props = {
   items?: CaptureResult[];
 };
 
-function fmt(ts: string) {
-  const d = new Date(ts);
-  return d.toLocaleString();
-}
-
 export default function CaptureTimeline({
-  title = "Capture Timeline",
+  title = "Health Analysis Feed",
   refreshMs = 5000,
   items,
 }: Props) {
@@ -30,10 +24,8 @@ export default function CaptureTimeline({
     }
 
     let alive = true;
-
     async function load() {
       try {
-        setLoading(true);
         const list = await getCaptures();
         if (!alive) return;
         setFetched(list);
@@ -44,7 +36,6 @@ export default function CaptureTimeline({
 
     load();
     const id = window.setInterval(load, refreshMs);
-
     return () => {
       alive = false;
       window.clearInterval(id);
@@ -54,43 +45,56 @@ export default function CaptureTimeline({
   const rows = items ?? fetched;
 
   return (
-    <div className="rounded-lg border p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="font-semibold">{title}</div>
-        <div className="text-xs text-gray-500">
-          {loading ? "Loading..." : `${rows.length} items`}
-        </div>
+    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+      <div className="border-b bg-gray-50/50 p-4 flex items-center justify-between">
+        <h2 className="font-bold text-gray-800">{title}</h2>
+        <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-200 text-gray-600">
+          {loading ? "Syncing..." : "Live"}
+        </span>
       </div>
 
-      {!rows.length ? (
-        <div className="text-sm text-gray-500">No captures yet.</div>
-      ) : (
-        <div className="max-h-80 overflow-auto rounded border">
-          <ul className="divide-y">
+      <div className="max-h-[400px] overflow-auto">
+        {!rows.length ? (
+          <div className="p-8 text-center text-sm text-gray-400">
+            Waiting for incoming data...
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-100">
             {rows
               .slice()
               .reverse()
-              .map((c) => (
-                <li key={c.id} className="p-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium">
-                      {c.prediction ?? "UNKNOWN"}
-                      {typeof c.confidence === "number"
-                        ? ` (${Math.round(c.confidence * 100)}%)`
-                        : ""}
+              .map((c) => {
+                const isSick = c.prediction?.toLowerCase() === "sick";
+                const confidencePercent = Math.round((c.confidence ?? 0) * 100);
+
+                return (
+                  <li key={c.id} className="p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {/* Status Indicator */}
+                        <span className={`h-2.5 w-2.5 rounded-full ${isSick ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
+                        <span className={`font-bold uppercase tracking-wide text-sm ${isSick ? 'text-red-700' : 'text-green-700'}`}>
+                          {c.prediction ?? "Processing"}
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-500">
+                        {confidencePercent}% Match
+                      </span>
                     </div>
-                    <div className="text-xs text-gray-500">
-                      {c.createdAt ? fmt(c.createdAt) : ""}
+
+                    {/* Confidence Meter */}
+                    <div className="w-full bg-gray-100 rounded-full h-1.5">
+                      <div 
+                        className={`h-1.5 rounded-full transition-all duration-500 ${isSick ? 'bg-red-400' : 'bg-green-400'}`}
+                        style={{ width: `${confidencePercent}%` }}
+                      />
                     </div>
-                  </div>
-                  <div className="mt-1 font-mono text-xs text-gray-500">
-                    id: {c.id}
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
