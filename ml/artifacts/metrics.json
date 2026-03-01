@@ -1,0 +1,18 @@
+{
+  "task": "regression",
+  "input_feature": "Sensor_Resistance_Ohms",
+  "target": "Bacteria_Load_CFU_per_mL",
+  "target_transform": "log10",
+  "r2_score_log10": 0.5060401283860944,
+  "mae_log10": 0.16487355801000325,
+  "rmse_log10": 0.22488140245165836,
+  "n_samples": 200,
+  "n_train": 160,
+  "n_test": 40,
+  "model": {
+    "type": "DecisionTreeRegressor",
+    "max_depth": 6,
+    "min_samples_leaf": 3,
+    "seed": 42
+  }
+}
