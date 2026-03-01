@@ -1,0 +1,8 @@
+services:
+  trainer:
+    build: .
+    working_dir: /work
+    volumes:
+      - ./data:/work/data
+      - ./artifacts:/work/artifacts
+    command: ["python", "train.py", "--data", "data/voc_dataset.csv", "--artifacts", "artifacts"]
