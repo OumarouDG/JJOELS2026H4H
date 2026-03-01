@@ -1,7 +1,7 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 from uuid import uuid4
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +10,7 @@ import json
 import os
 import time
 import subprocess
-from fastapi import BackgroundTasks
+from collections import deque
 
 import serial  # pyserial
 
@@ -23,13 +23,24 @@ SERIAL_BAUD = int(os.getenv("SERIAL_BAUD", "115200"))
 RECORDINGS_DIR = Path(os.getenv("RECORDINGS_DIR", "./recordings"))
 RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Your inference command. Change infer.py path if needed.
-# Example default expects: python infer.py --csv <path>
-INFER_CMD = os.getenv("INFER_CMD", "python infer.py --csv").split()
+# infer.py should print JSON to stdout, like: {"label":"...", "confidence":0.87, "features":{...}}
+from pathlib import Path
 
-# If your Arduino sketch uses simple commands instead of START/STOP:
-ARDUINO_START_CMD = os.getenv("ARDUINO_START_CMD", "START")  # "START" or "s"
-ARDUINO_STOP_CMD = os.getenv("ARDUINO_STOP_CMD", "STOP")     # "STOP" or "p"
+ML_DIR = Path(__file__).parent.parent / "ml"
+MODEL_PATH = ML_DIR / "artifacts/model.joblib"   # change if your model file has a different name
+INFER_SCRIPT = ML_DIR / "live_file_test.py"
+
+INFER_CMD = [
+    "python",
+    str(INFER_SCRIPT),
+    "--model",
+    str(MODEL_PATH),
+    "--data",
+]
+
+# Arduino sketch uses 's' to stream, 'p' to stop (per UnoQSketch.ino)
+ARDUINO_STREAM_ON = os.getenv("ARDUINO_STREAM_ON", "s")
+ARDUINO_STREAM_OFF = os.getenv("ARDUINO_STREAM_OFF", "p")
 
 
 # ----------------------------
@@ -52,9 +63,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ----------------------------
+# In-memory state
+# ----------------------------
 CAPTURES: List[dict] = []
 
+# ring buffer of live samples
+SAMPLES_MAX = int(os.getenv("SAMPLES_MAX", "4000"))  # plenty for a few minutes @ 5Hz
+SAMPLES = deque(maxlen=SAMPLES_MAX)
+SAMPLES_LOCK = asyncio.Lock()
 
+# protect /record from overlapping sessions
+recording_lock = asyncio.Lock()
+
+
+# ----------------------------
+# Models
+# ----------------------------
 class ExternalCaptureIn(BaseModel):
     prediction: str
     confidence: Optional[float] = None
@@ -62,11 +88,151 @@ class ExternalCaptureIn(BaseModel):
 
 
 # ----------------------------
+# Helpers
+# ----------------------------
+class SerialManager:
+    def __init__(self, port: str, baud: int):
+        self.port_name = port
+        self.baud = baud
+        self.ser: Optional[serial.Serial] = None
+        self.write_lock = asyncio.Lock()
+
+    def is_open(self) -> bool:
+        return self.ser is not None and self.ser.is_open
+
+    def open(self):
+        self.ser = serial.Serial(self.port_name, self.baud, timeout=0.2)
+        # Arduino boards often reset on open
+        time.sleep(2.0)
+
+    def close(self):
+        try:
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+        except Exception:
+            pass
+
+    async def write_line(self, line: str):
+        async with self.write_lock:
+            if not self.is_open():
+                raise RuntimeError("Serial is not open")
+            await asyncio.to_thread(self.ser.write, line.encode("utf-8"))
+
+    async def read_line(self) -> Optional[str]:
+        if not self.is_open():
+            return None
+
+        def _read():
+            raw = self.ser.readline()
+            if not raw:
+                return None
+            return raw.decode("utf-8", errors="ignore").strip()
+
+        return await asyncio.to_thread(_read)
+
+
+serial_mgr = SerialManager(SERIAL_PORT, SERIAL_BAUD)
+
+
+def _parse_sensor_line(line: str) -> Optional[Dict[str, Any]]:
+    """
+    Arduino (UnoQSketch.ino) prints:
+      "tempC,humidity,pressure_hPa,gas_ohms"
+    plus some text lines like:
+      "BME688 ready..."
+      "OK: streaming ON"
+      header line: "tempC,humidity,pressure_hPa,gas_ohms"
+
+    We return frontend-friendly keys:
+      { t, tempC, humidity, pressure_hPa, gas_ohms }
+    """
+    if not line:
+        return None
+
+    # ignore obvious non-data lines
+    if line.startswith("BME") or line.startswith("OK:") or line.startswith("Commands:"):
+        return None
+    if line.strip() == "tempC,humidity,pressure_hPa,gas_ohms":
+        return None
+
+    parts = line.split(",")
+    if len(parts) != 4:
+        return None
+
+    try:
+        tempC = float(parts[0])
+        humidity = float(parts[1])
+        pressure_hPa = float(parts[2])
+        gas_ohms = float(parts[3])
+    except ValueError:
+        return None
+
+    return {
+        "t": int(time.time() * 1000),
+        "tempC": tempC,
+        "humidity": humidity,
+        "pressure_hPa": pressure_hPa,
+        "gas_ohms": gas_ohms,
+    }
+
+
+def _write_csv(csv_path: Path, rows: List[Dict[str, Any]]):
+    header = "Sensor_Resistance_Ohms\n"
+    lines = [str(r["gas_ohms"]) for r in rows]
+    csv_path.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
+
+
+async def _run_inference(csv_path: Path) -> Dict[str, Any]:
+    cmd = INFER_CMD + [str(csv_path)]
+
+    def _run():
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(p.stderr.strip() or f"Inference exited {p.returncode}")
+        try:
+            return json.loads(p.stdout)
+        except json.JSONDecodeError:
+            raise RuntimeError(f"infer.py did not output valid JSON:\n{p.stdout}")
+
+    return await asyncio.to_thread(_run)
+
+
+async def serial_reader_loop():
+    """
+    Always-on serial reader that keeps SAMPLES filled.
+    This is what makes the whole thing stable: frontend polls HTTP,
+    backend just buffers data.
+    """
+    while True:
+        try:
+            line = await serial_mgr.read_line()
+            if not line:
+                await asyncio.sleep(0.002)
+                continue
+
+            sample = _parse_sensor_line(line)
+            if not sample:
+                continue
+
+            async with SAMPLES_LOCK:
+                SAMPLES.append(sample)
+
+        except Exception:
+            # If serial dies, don't take down the web server.
+            await asyncio.sleep(0.25)
+
+
+# ----------------------------
 # REST endpoints
 # ----------------------------
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {
+        "ok": True,
+        "serial_port": SERIAL_PORT,
+        "serial_open": serial_mgr.is_open(),
+        "samples_buffered": len(SAMPLES),
+    }
 
 
 @app.get("/metrics")
@@ -93,286 +259,87 @@ def post_capture(payload: ExternalCaptureIn):
     return capture
 
 
-# Your frontend calls POST /capture (singular), so provide an alias.
+# keep the alias, because humans love inconsistency
 @app.post("/capture")
 def post_capture_alias(payload: ExternalCaptureIn):
     return post_capture(payload)
 
+
+@app.get("/live")
+async def live(tail: int = 120):
+    """
+    Polling endpoint for the live chart.
+    tail=120 gives you last ~24 seconds at 5Hz.
+    """
+    tail = max(1, min(int(tail), 2000))
+    async with SAMPLES_LOCK:
+        data = list(SAMPLES)[-tail:]
+    return {"samples": data}
+
+
 @app.post("/record")
-async def start_record(background_tasks: BackgroundTasks, duration_ms: int = 5000):
-    # kick off recording and streaming; response returns immediately
-    background_tasks.add_task(record_session, duration_ms)
-    return {"ok": True, "started": True, "duration_ms": duration_ms}
-
-
-# ----------------------------
-# Serial + WebSocket bridge
-# ----------------------------
-class Hub:
-    """Tracks connected WebSocket clients and broadcasts messages."""
-    def __init__(self):
-        self.clients: List[WebSocket] = []
-        self.lock = asyncio.Lock()
-
-    async def connect(self, ws: WebSocket):
-        await ws.accept()
-        async with self.lock:
-            self.clients.append(ws)
-
-    async def disconnect(self, ws: WebSocket):
-        async with self.lock:
-            if ws in self.clients:
-                self.clients.remove(ws)
-
-    async def broadcast(self, message: Dict[str, Any]):
-        payload = json.dumps(message)
-        async with self.lock:
-            clients = list(self.clients)
-        for ws in clients:
-            try:
-                await ws.send_text(payload)
-            except Exception:
-                pass
-
-
-hub = Hub()
-
-
-class SerialManager:
-    """Owns the serial port; provides async-friendly read/write."""
-    def __init__(self, port: str, baud: int):
-        self.port_name = port
-        self.baud = baud
-        self.ser: Optional[serial.Serial] = None
-        self.write_lock = asyncio.Lock()
-
-    def is_open(self) -> bool:
-        return self.ser is not None and self.ser.is_open
-
-    def open(self):
-        # timeout so readline doesn't block forever
-        self.ser = serial.Serial(self.port_name, self.baud, timeout=0.2)
-        # Many Arduinos reset on serial open; give it a moment
-        time.sleep(2.0)
-
-    async def write_line(self, line: str):
-        async with self.write_lock:
-            if not self.is_open():
-                raise RuntimeError("Serial is not open")
-            await asyncio.to_thread(self.ser.write, line.encode("utf-8"))
-
-    async def read_line(self) -> Optional[str]:
-        if not self.is_open():
-            return None
-
-        def _read():
-            raw = self.ser.readline()
-            if not raw:
-                return None
-            return raw.decode("utf-8", errors="ignore").strip()
-
-        return await asyncio.to_thread(_read)
-
-
-serial_mgr = SerialManager(SERIAL_PORT, SERIAL_BAUD)
-
-# Guard so you don't start 6 recordings at once
-recording_lock = asyncio.Lock()
-
-
-def _write_csv(csv_path: Path, rows: List[Dict[str, Any]]):
-    header = "ms,gas_ohms,temp_c,hum_pct,press_hpa\n"
-    lines = [
-        f"{r['ms']},{r['gas_ohms']},{r['temp_c']},{r['hum_pct']},{r['press_hpa']}"
-        for r in rows
-    ]
-    csv_path.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
-
-
-async def _run_inference(csv_path: Path) -> Dict[str, Any]:
-    cmd = INFER_CMD + [str(csv_path)]
-
-    def _run():
-        p = subprocess.run(cmd, capture_output=True, text=True)
-        if p.returncode != 0:
-            raise RuntimeError(p.stderr.strip() or f"Inference exited {p.returncode}")
-        try:
-            return json.loads(p.stdout)
-        except json.JSONDecodeError:
-            raise RuntimeError(f"infer.py did not output valid JSON:\n{p.stdout}")
-
-    return await asyncio.to_thread(_run)
-
-
-def _parse_sensor_line(line: str) -> Optional[Dict[str, Any]]:
+async def record(duration_ms: int = 5000):
     """
-    Accepts TWO formats:
-    1) "DATA,ms,gas,temp,hum,press"
-    2) "temp,hum,press,gas"   (common Arduino CSV print for BME688)
-       (and we synthesize ms as epoch ms)
-    Returns dict with keys: ms, gas_ohms, temp_c, hum_pct, press_hpa
+    No WebSocket. No background task.
+    This blocks for duration_ms, then returns the capture result.
     """
-    if not line:
-        return None
+    duration_ms = max(500, min(int(duration_ms), 60000))
 
-    # Format 1
-    if line.startswith("DATA,"):
-        parts = line.split(",")
-        if len(parts) >= 6:
-            try:
-                return {
-                    "ms": int(parts[1]),
-                    "gas_ohms": float(parts[2]),
-                    "temp_c": float(parts[3]),
-                    "hum_pct": float(parts[4]),
-                    "press_hpa": float(parts[5]),
-                }
-            except ValueError:
-                return None
+    if not serial_mgr.is_open():
+        return {"ok": False, "error": f"Serial not connected on {SERIAL_PORT}"}
 
-    # Format 2 (temp,hum,press,gas)
-    parts = line.split(",")
-    if len(parts) == 4:
-        try:
-            temp_c = float(parts[0])
-            hum_pct = float(parts[1])
-            press_hpa = float(parts[2])
-            gas_ohms = float(parts[3])
-            return {
-                "ms": int(time.time() * 1000),
-                "gas_ohms": gas_ohms,
-                "temp_c": temp_c,
-                "hum_pct": hum_pct,
-                "press_hpa": press_hpa,
-            }
-        except ValueError:
-            return None
-
-    return None
-
-
-async def _arduino_start(duration_ms: int):
-    """
-    Supports two Arduino command styles:
-    - START,<duration_ms>  (if ARDUINO_START_CMD == "START")
-    - s                   (if ARDUINO_START_CMD == "s")
-    """
-    if ARDUINO_START_CMD.lower() == "s":
-        await serial_mgr.write_line("s\n")
-    else:
-        await serial_mgr.write_line(f"START,{duration_ms}\n")
-
-
-async def _arduino_stop():
-    if ARDUINO_STOP_CMD.lower() == "p":
-        await serial_mgr.write_line("p\n")
-    else:
-        await serial_mgr.write_line("STOP\n")
-
-
-async def record_session(duration_ms: int = 5000):
-    """
-    Streams points live, buffers for duration_ms, saves CSV, runs inference.
-    Accepts both Arduino output formats via _parse_sensor_line().
-    """
     async with recording_lock:
-        if not serial_mgr.is_open():
-            await hub.broadcast({"type": "error", "error": "Serial not connected"})
-            return
+        start_t = int(time.time() * 1000)
+        await asyncio.sleep(duration_ms / 1000.0)
+        end_t = int(time.time() * 1000)
 
-        await hub.broadcast({"type": "record_ack", "duration_ms": duration_ms})
-        await _arduino_start(duration_ms)
-
-        rows: List[Dict[str, Any]] = []
-        deadline = time.time() + (duration_ms / 1000.0)
-
-        while time.time() < deadline:
-            line = await serial_mgr.read_line()
-            if not line:
-                await asyncio.sleep(0.001)
-                continue
-
-            # Some sketches print DONE, some don't. If they do, respect it.
-            if line.strip().upper() == "DONE":
-                break
-
-            point = _parse_sensor_line(line)
-            if not point:
-                continue
-
-            rows.append(point)
-            await hub.broadcast({"type": "data", "sample": point})
-
-        await _arduino_stop()
+        async with SAMPLES_LOCK:
+            window = [s for s in SAMPLES if start_t <= s["t"] <= end_t]
 
         ts = int(time.time() * 1000)
         csv_path = RECORDINGS_DIR / f"session_{ts}.csv"
-        _write_csv(csv_path, rows)
-        await hub.broadcast({"type": "record_done", "csv": str(csv_path), "n": len(rows)})
+        _write_csv(csv_path, window)
 
         try:
             result = await _run_inference(csv_path)
-            await hub.broadcast({"type": "inference_result", "result": result})
-
             capture = {
                 "id": str(uuid4()),
                 "createdAt": datetime.now(timezone.utc).isoformat(),
-                "features": {"csv": str(csv_path), "n": len(rows)},
+                "window": window,  # optional, UI can ignore
+                "features": result.get("features") or {"csv_rows": len(window)},
                 "prediction": result.get("label") or result.get("prediction") or "unknown",
                 "confidence": result.get("confidence"),
             }
             CAPTURES.append(capture)
-            await hub.broadcast({"type": "capture_saved", "capture": capture})
+            return {"ok": True, "capture": capture, "csv": str(csv_path)}
         except Exception as e:
-            await hub.broadcast({"type": "inference_error", "error": str(e)})
+            return {"ok": False, "error": str(e), "csv": str(csv_path)}
 
 
 # ----------------------------
-# Startup: don't die if COM8 is busy
+# Startup / Shutdown
 # ----------------------------
 @app.on_event("startup")
-def _startup():
-    # print routes so we can confirm /ws exists in the running app
-    print("[routes]", [getattr(r, "path", None) for r in app.routes])
-
+async def _startup():
+    print("[startup] routes:", [getattr(r, "path", None) for r in app.routes])
     try:
         serial_mgr.open()
         print(f"[serial] opened {SERIAL_PORT} @ {SERIAL_BAUD}")
+
+        # start Arduino streaming (matches UnoQSketch.ino)
+        await serial_mgr.write_line(f"{ARDUINO_STREAM_ON}\n")
+        print("[serial] sent stream ON")
+
+        asyncio.create_task(serial_reader_loop())
+        print("[serial] reader loop started")
+
     except Exception as e:
-        # server still runs; UI can show error and you can restart after freeing COM port
         print(f"[serial] FAILED to open {SERIAL_PORT}: {e}")
 
 
-# ----------------------------
-# WebSocket endpoint
-# ----------------------------
-@app.websocket("/ws")
-async def ws_endpoint(ws: WebSocket):
-    await hub.connect(ws)
+@app.on_event("shutdown")
+def _shutdown():
     try:
-        await ws.send_text(json.dumps({"type": "hello", "serial_port": SERIAL_PORT, "serial_open": serial_mgr.is_open()}))
-
-        while True:
-            raw = await ws.receive_text()
-            msg = json.loads(raw)
-
-            # Debug echo support (useful to prove WS is working)
-            if msg.get("type") == "ping":
-                await ws.send_text(json.dumps({"type": "pong"}))
-                continue
-
-            if msg.get("type") == "record_start":
-                duration_ms = int(msg.get("duration_ms", 5000))
-                asyncio.create_task(record_session(duration_ms))
-
-            elif msg.get("type") == "record_stop":
-                if serial_mgr.is_open():
-                    await _arduino_stop()
-
-    except WebSocketDisconnect:
+        serial_mgr.close()
+    except Exception:
         pass
-    finally:
-        await hub.disconnect(ws)
-
-for r in app.routes:
-    print(type(r).__name__, getattr(r, "path", None))

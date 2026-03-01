@@ -16,9 +16,8 @@ export default function CaptureButton({ onResult }: Props) {
     setErr(null);
     setLoading(true);
     try {
-      await postRecord(5000);
-      // Do NOT call onResult here.
-      // The real result arrives via WebSocket: msg.type === "capture_saved"
+      const capture = await postRecord(5000);
+      onResult(capture);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Record failed";
       setErr(msg);
